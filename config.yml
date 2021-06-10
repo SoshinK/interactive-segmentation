@@ -6,7 +6,7 @@ GRABCUT_PATH: "./datasets/GrabCut"
 BERKELEY_PATH: "./datasets/Berkeley"
 DAVIS_PATH: "./datasets/DAVIS"
 COCO_MVAL_PATH: "./datasets/COCO_MVal"
-THINOBJ5K_PATH: "/home/fila/soshin/thin-object-selection/data/ThinObject5K"
+THINOBJ5K_PATH: "./datasets/ThinObject5K"
 
 # Train datasets
 SBD_PATH: "./datasets/SBD"

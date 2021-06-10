@@ -12,7 +12,7 @@ from isegm.inference.evaluation import evaluate_dataset, evaluate_sample, evalua
 from isegm.inference.predictors import get_predictor
 
 
-device = torch.device('cuda:0')
+device = torch.device('cuda:1')
 cfg = exp.load_config_file('config.yml', return_edict=True)
 
 DATASET = 'ThinObject5k'
@@ -32,7 +32,7 @@ brs_mode = 'f-BRS-B'
 predictor = get_predictor(model, brs_mode, device, prob_thresh=MODEL_THRESH)
 
 TARGET_IOU = 0.9
-start_index = 411
+start_index = 0
 all_ious, elapsed_time = evaluate_thin_object_5k(dataset, predictor, start_index, pred_thr=0.49,
                                         max_clicks=EVAL_MAX_CLICKS)
 all_ious = np.array(all_ious)
