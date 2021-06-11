@@ -11,3 +11,4 @@ from .images_dir import ImagesDirDataset
 from .ade20k import ADE20kDataset
 from .pascalvoc import PascalVocDataset
 from .thinObject5k import ThinObject5k
+from .coco_lvis_thin import CocoLvisThinObject5kDataset

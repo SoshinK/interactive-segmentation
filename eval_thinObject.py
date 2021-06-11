@@ -24,7 +24,7 @@ print(len(dataset))
 EVAL_MAX_CLICKS = 4
 MODEL_THRESH = 0.49
 
-checkpoint_path = utils.find_checkpoint(cfg.INTERACTIVE_MODELS_PATH, 'coco_lvis_h18_itermask')
+checkpoint_path = utils.find_checkpoint(cfg.INTERACTIVE_MODELS_PATH, 'last_checkpoint')
 model = utils.load_is_model(checkpoint_path, device)
 
 # Possible choices: 'NoBRS', 'f-BRS-A', 'f-BRS-B', 'f-BRS-C', 'RGB-BRS', 'DistMap-BRS'
