@@ -1,5 +1,5 @@
 from isegm.utils.exp_imports.default import *
-MODEL_NAME = 'cocolvis_hrnet18'
+MODEL_NAME = 'cocolvis_thinobject_hrnet18'
 
 
 def main(cfg):
@@ -11,14 +11,18 @@ def init_model(cfg):
     model_cfg = edict()
     model_cfg.crop_size = (320, 480)
     model_cfg.num_max_points = 24
+    checkpoint_path = '/home/konstantin_soshin/Work/interactive-segmentation/weights/coco_lvis_h18_itermask.pth' #
+    state_dict = torch.load(checkpoint_path, map_location='cpu')
+
 
     model = HRNetModel(width=18, ocr_width=64, with_aux_output=True, use_leaky_relu=True,
                        use_rgb_conv=False, use_disks=True, norm_radius=5,
                        with_prev_mask=True)
-
+    model.load_state_dict(state_dict['state_dict'], strict=False)
     model.to(cfg.device)
-    model.apply(initializer.XavierGluon(rnd_type='gaussian', magnitude=2.0))
-    model.feature_extractor.load_pretrained_weights(cfg.IMAGENET_PRETRAINED_MODELS.HRNETV2_W18)
+    # model.apply(initializer.XavierGluon(rnd_type='gaussian', magnitude=2.0))
+   
+    # model.feature_extractor.load_pretrained_weights(cfg.IMAGENET_PRETRAINED_MODELS.HRNETV2_W18)
 
     return model, model_cfg
 
@@ -58,11 +62,13 @@ def train(model, cfg, model_cfg):
         min_object_area=1000,
         keep_background_prob=0.05,
         points_sampler=points_sampler,
-        epoch_len=30000,
-        stuff_prob=0.30
+        epoch_len=9000,
+        stuff_prob=0.30,
+        cocolvis_size=0.6
     )
 
-
+    # print(len(trainset._cocolvis_dataset_samples), len(trainset._thinobject5k_dataset_samples))
+    # exit()
     # trainset = CocoLvisDataset(
     #     cfg.LVIS_v1_PATH,
     #     split='train',
@@ -111,4 +117,4 @@ def train(model, cfg, model_cfg):
                         metrics=[AdaptiveIoU()],
                         max_interactive_points=model_cfg.num_max_points,
                         max_num_next_clicks=3)
-    trainer.run(num_epochs=230)
+    trainer.run(num_epochs=20)

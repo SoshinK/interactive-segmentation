@@ -56,9 +56,10 @@ class CocoLvisThinObject5kDataset(ISDataset):
             raise ValueError("Wrong cocolvis_size")
         else:
             add_samples_from_cocolvis = cocolvis_size / (1 - cocolvis_size) * len(self._thinobject5k_dataset_samples)
+            print(add_samples_from_cocolvis)
             self.dataset_samples = np.concatenate((
                 self._thinobject5k_dataset_samples, 
-                np.array(self._cocolvis_dataset_samples)[::(len(self._cocolvis_dataset_samples) // add_samples_from_cocolvis)])) #bullshit 
+                np.array(self._cocolvis_dataset_samples)[::(len(self._cocolvis_dataset_samples) // int(add_samples_from_cocolvis))])) #bullshit 
         print(">> ", len(self.dataset_samples), len(self._cocolvis_dataset_samples), len(self._cocolvis_dataset_samples) / len(self.dataset_samples), cocolvis_size)
         print("??", self.dataset_samples[0], self._cocolvis_dataset_samples[0])
 
