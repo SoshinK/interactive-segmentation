@@ -64,7 +64,7 @@ def train(model, cfg, model_cfg):
         points_sampler=points_sampler,
         epoch_len=9000,
         stuff_prob=0.30,
-        cocolvis_size=0.6
+        cocolvis_size=0.5
     )
 
     # print(len(trainset._cocolvis_dataset_samples), len(trainset._thinobject5k_dataset_samples))
@@ -102,7 +102,7 @@ def train(model, cfg, model_cfg):
     # )
 
     optimizer_params = {
-        'lr': 5e-4, 'betas': (0.9, 0.999), 'eps': 1e-8
+        'lr': 5e-5, 'betas': (0.9, 0.999), 'eps': 1e-8
     }
 
     lr_scheduler = partial(torch.optim.lr_scheduler.MultiStepLR,

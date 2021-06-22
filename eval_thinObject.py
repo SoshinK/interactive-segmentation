@@ -24,11 +24,11 @@ print(len(dataset))
 EVAL_MAX_CLICKS = 4
 MODEL_THRESH = 0.49
 
-checkpoint_path = utils.find_checkpoint(cfg.INTERACTIVE_MODELS_PATH, 'last_checkpoint_pretr_50coco_50thin_11epochs_lr5e-5')
+checkpoint_path = utils.find_checkpoint(cfg.INTERACTIVE_MODELS_PATH, 'coco_lvis_h18_itermask')
 model = utils.load_is_model(checkpoint_path, device)
 
 # Possible choices: 'NoBRS', 'f-BRS-A', 'f-BRS-B', 'f-BRS-C', 'RGB-BRS', 'DistMap-BRS'
-brs_mode = 'NoBRS'
+brs_mode = 'f-BRS-B'
 predictor = get_predictor(model, brs_mode, device, prob_thresh=MODEL_THRESH)
 
 TARGET_IOU = 0.9
