@@ -14,3 +14,4 @@ from isegm.model import initializer
 
 from isegm.model.is_hrnet_model import HRNetModel
 from isegm.model.is_deeplab_model import DeeplabModel
+from isegm.model.is_tos_hrnet_model import TOSHRNetModel
