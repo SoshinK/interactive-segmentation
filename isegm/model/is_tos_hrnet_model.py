@@ -23,4 +23,4 @@ class TOSHRNetModel(ISModel):
     def backbone_forward(self, image, coord_features=None):
         net_outputs = self.feature_extractor(image, coord_features)
 
-        return {'instances': net_outputs[0], 'instances_aux': net_outputs[1]}
+        return {'instances': net_outputs[0], 'instances_aux': net_outputs[1], 'instances_cls_head': net_outputs[2], 'instances_edges': net_outputs[3]}

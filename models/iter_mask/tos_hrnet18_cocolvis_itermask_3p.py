@@ -33,6 +33,10 @@ def train(model, cfg, model_cfg):
     loss_cfg.instance_loss_weight = 1.0
     loss_cfg.instance_aux_loss = SigmoidBinaryCrossEntropyLoss()
     loss_cfg.instance_aux_loss_weight = 0.4
+    loss_cfg.instances_cls_head_loss = SigmoidBinaryCrossEntropyLoss()
+    loss_cfg.instances_cls_head_loss_weight = 0.4
+    loss_cfg.instances_edges_loss = SigmoidBinaryCrossEntropyLoss()
+    loss_cfg.instances_edges_loss_weight = 1.0
 
     train_augmentator = Compose([
         UniformRandomResize(scale_range=(0.75, 1.40)),
@@ -78,7 +82,7 @@ def train(model, cfg, model_cfg):
 
     lr_scheduler = partial(torch.optim.lr_scheduler.MultiStepLR,
                            milestones=[200, 220], gamma=0.1)
-    trainer = ISTrainer(model, cfg, model_cfg, loss_cfg,
+    trainer = TOS_HRNet_Trainer(model, cfg, model_cfg, loss_cfg,
                         trainset, valset,
                         optimizer='adam',
                         optimizer_params=optimizer_params,

@@ -6,6 +6,7 @@ from collections import defaultdict
 
 import cv2
 import torch
+import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -15,6 +16,7 @@ from isegm.utils.vis import draw_probmap, draw_points
 from isegm.utils.misc import save_checkpoint
 from isegm.utils.serialization import get_config_repr
 from isegm.utils.distributed import get_dp_wrapper, get_sampler, reduce_loss_dict
+from isegm.utils.pytorch_sobel import sobel
 from .optimizer import get_optimizer
 
 
@@ -411,3 +413,108 @@ def load_weights(model, path_to_weights):
     new_state_dict = torch.load(path_to_weights, map_location='cpu')['state_dict']
     current_state_dict.update(new_state_dict)
     model.load_state_dict(current_state_dict)
+
+
+class TOS_HRNet_Trainer(ISTrainer):
+    def __init__(self, model, cfg, model_cfg, loss_cfg,
+                 trainset, valset,
+                 optimizer='adam',
+                 optimizer_params=None,
+                 image_dump_interval=200,
+                 checkpoint_interval=10,
+                 tb_dump_period=25,
+                 max_interactive_points=0,
+                 lr_scheduler=None,
+                 metrics=None,
+                 additional_val_metrics=None,
+                 net_inputs=('images', 'points'),
+                 max_num_next_clicks=0,
+                 click_models=None,
+                 prev_mask_drop_prob=0.0,
+                 ):
+        super().__init__(model, cfg, model_cfg, loss_cfg,
+                 trainset, valset,
+                 optimizer,
+                 optimizer_params,
+                 image_dump_interval,
+                 checkpoint_interval,
+                 tb_dump_period,
+                 max_interactive_points,
+                 lr_scheduler,
+                 metrics,
+                 additional_val_metrics,
+                 net_inputs,
+                 max_num_next_clicks,
+                 click_models,
+                 prev_mask_drop_prob,
+                 )
+        
+
+    def batch_forward(self, batch_data, validation=False):
+        metrics = self.val_metrics if validation else self.train_metrics
+        losses_logging = dict()
+
+        with torch.set_grad_enabled(not validation):
+            batch_data = {k: v.to(self.device) for k, v in batch_data.items()}
+            image, gt_mask, points = batch_data['images'], batch_data['instances'], batch_data['points']
+            orig_image, orig_gt_mask, orig_points = image.clone(), gt_mask.clone(), points.clone()
+
+            prev_output = torch.zeros_like(image, dtype=torch.float32)[:, :1, :, :]
+
+            last_click_indx = None
+
+            with torch.no_grad():
+                num_iters = random.randint(0, self.max_num_next_clicks)
+
+                for click_indx in range(num_iters):
+                    last_click_indx = click_indx
+
+                    if not validation:
+                        self.net.eval()
+
+                    if self.click_models is None or click_indx >= len(self.click_models):
+                        eval_model = self.net
+                    else:
+                        eval_model = self.click_models[click_indx]
+
+                    net_input = torch.cat((image, prev_output), dim=1) if self.net.with_prev_mask else image
+                    prev_output = torch.sigmoid(eval_model(net_input, points)['instances'])
+
+                    points = get_next_points(prev_output, orig_gt_mask, points, click_indx + 1)
+
+                    if not validation:
+                        self.net.train()
+
+                if self.net.with_prev_mask and self.prev_mask_drop_prob > 0 and last_click_indx is not None:
+                    zero_mask = np.random.random(size=prev_output.size(0)) < self.prev_mask_drop_prob
+                    prev_output[zero_mask] = torch.zeros_like(prev_output[zero_mask])
+
+            batch_data['points'] = points
+
+            net_input = torch.cat((image, prev_output), dim=1) if self.net.with_prev_mask else image
+            output = self.net(net_input, points)
+
+            loss = 0.0
+            # print("1>>", output['instances'].shape, batch_data['instances'].shape)
+            # print("2>>", output['instances_aux'].shape, batch_data['instances'].shape)
+            # print("3>>", output['instances_cls_head'].shape, batch_data['instances'].shape)
+            # print("4>>", output['instances_edges'].shape, sobel(batch_data['instances']).shape)
+            # plt.imshow(batch_data['instances'][0].detach().cpu().numpy()[0])
+            # plt.show()
+            # plt.imshow(sobel(batch_data['instances'])[0].detach().cpu().numpy()[0])
+            # plt.show()
+            loss = self.add_loss('instance_loss', loss, losses_logging, validation,
+                                 lambda: (output['instances'], batch_data['instances']))
+            loss = self.add_loss('instance_aux_loss', loss, losses_logging, validation,
+                                 lambda: (output['instances_aux'], batch_data['instances']))
+            loss = self.add_loss('instances_cls_head_loss', loss, losses_logging, validation,
+                                 lambda: (output['instances_cls_head'], F.interpolate(batch_data['instances'], (output['instances_cls_head'].shape[2], output['instances_cls_head'].shape[3]))))
+            loss = self.add_loss('instances_edges_loss', loss, losses_logging, validation,
+                                 lambda: (output['instances_edges'], sobel(batch_data['instances'])))
+            if self.is_master:
+                with torch.no_grad():
+                    for m in metrics:
+                        m.update(*(output.get(x) for x in m.pred_outputs),
+                                 *(batch_data[x] for x in m.gt_outputs))
+        return loss, losses_logging, batch_data, output
+

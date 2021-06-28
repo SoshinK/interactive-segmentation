@@ -221,12 +221,12 @@ class HighResolutionNet_with_hrnetoutput(HighResolutionNet):
 
             context = self.ocr_gather_head(feats, out_aux)
             feats = self.ocr_distri_head(feats, context)
-            # out = self.cls_head(feats)
+            cls_head_out = self.cls_head(feats)
             out = feats
-            return [out, out_aux], hrnetoutput
+            return [out, out_aux, hrnetoutput, cls_head_out]
         else:
             # return [self.cls_head(feats), None], hrnetoutput
-            return [feats, None], hrnetoutput
+            return [feats, None, hrnetoutput, self.cls_head(feats)] 
 
     def compute_hrnet_feats(self, x, additional_features):
         x = self.compute_pre_stage_features(x, additional_features)
@@ -342,9 +342,10 @@ class TOS_HRNet(nn.Module):
         # x_lr4 = self.layer4(x_lr3)
         # print()
         # mask_lr, x_lr5_aspp, x_lr5 = self.layer5(x_lr1, x_lr4)
-        out, hrnetoutput = self.context_branch(x_lr, additional_features)
+        # out, hrnetoutput = self.context_branch(x_lr, additional_features)
+        out, out_aux, hrnetoutput, cls_head_out  = self.context_branch(x_lr, additional_features)
         # print("4", out[0].shape, out[1].shape, hrnetoutput[0].shape, hrnetoutput[1].shape, hrnetoutput[2].shape, hrnetoutput[3].shape)
-        out, out_aux = out
+        # out, out_aux = out
         # Edge stream
         x_gr1, x_enc1 = self.grad1(x_grad, hrnetoutput[0], roi)
         # print("5", x_gr1.shape, x_enc1.shape)
@@ -386,7 +387,7 @@ class TOS_HRNet(nn.Module):
         fuse3 = self.fuse3(fuse2)
         mask = self.mask(fuse3)
 
-        return mask, out_aux
+        return mask, out_aux, cls_head_out, edge
 
     # def load_pretrained_weights(self, pretrained_path=''):
     #     model_dict = self.state_dict()
