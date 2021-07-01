@@ -337,7 +337,7 @@ class TOS_HRNet(nn.Module):
         # mask_lr, x_lr5_aspp, x_lr5 = self.layer5(x_lr1, x_lr4)
         # out, hrnetoutput = self.context_branch(x_lr, additional_features)
         out, out_aux, hrnetoutput, cls_head_out  = self.context_branch(x_lr, additional_features)
-        print("LOL", out.shape, cls_head_out.shape)
+        # print("LOL", out.shape, cls_head_out.shape)
         # print("4", out[0].shape, out[1].shape, hrnetoutput[0].shape, hrnetoutput[1].shape, hrnetoutput[2].shape, hrnetoutput[3].shape)
         # out, out_aux = out
         # # Edge stream
