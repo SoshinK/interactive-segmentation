@@ -495,22 +495,15 @@ class TOS_HRNet_Trainer(ISTrainer):
             output = self.net(net_input, points)
 
             loss = 0.0
-            # print("1>>", output['instances'].shape, batch_data['instances'].shape)
-            # print("2>>", output['instances_aux'].shape, batch_data['instances'].shape)
-            # print("3>>", output['instances_cls_head'].shape, batch_data['instances'].shape)
-            # print("4>>", output['instances_edges'].shape, sobel(batch_data['instances']).shape)
-            # plt.imshow(batch_data['instances'][0].detach().cpu().numpy()[0])
-            # plt.show()
-            # plt.imshow(sobel(batch_data['instances'])[0].detach().cpu().numpy()[0])
-            # plt.show()
+
             loss = self.add_loss('instance_loss', loss, losses_logging, validation,
                                  lambda: (output['instances'], batch_data['instances']))
             loss = self.add_loss('instance_aux_loss', loss, losses_logging, validation,
                                  lambda: (output['instances_aux'], batch_data['instances']))
-            loss = self.add_loss('instances_cls_head_loss', loss, losses_logging, validation,
-                                 lambda: (output['instances_cls_head'], F.interpolate(batch_data['instances'], (output['instances_cls_head'].shape[2], output['instances_cls_head'].shape[3]))))
-            loss = self.add_loss('instances_edges_loss', loss, losses_logging, validation,
-                                 lambda: (output['instances_edges'], sobel(batch_data['instances'])))
+            # loss = self.add_loss('instances_cls_head_loss', loss, losses_logging, validation,
+            #                      lambda: (output['instances_cls_head'], F.interpolate(batch_data['instances'], (output['instances_cls_head'].shape[2], output['instances_cls_head'].shape[3]))))
+            # loss = self.add_loss('instances_edges_loss', loss, losses_logging, validation,
+            #                      lambda: (output['instances_edges'], sobel(batch_data['instances'])))
             if self.is_master:
                 with torch.no_grad():
                     for m in metrics:
