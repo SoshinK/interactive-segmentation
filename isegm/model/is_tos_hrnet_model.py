@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 from isegm.utils.serialization import serialize
@@ -24,3 +25,23 @@ class TOSHRNetModel(ISModel):
         net_outputs = self.feature_extractor(image, coord_features)
 
         return {'instances': net_outputs[0], 'instances_aux': net_outputs[1], 'instances_cls_head': net_outputs[2], 'instances_edges': net_outputs[3]}
+    
+    def forward(self, image, points):
+        image, prev_mask = self.prepare_input(image)
+        coord_features = self.get_coord_features(image, prev_mask, points)
+
+        if self.rgb_conv is not None:
+            x = self.rgb_conv(torch.cat((image, coord_features), dim=1))
+            outputs = self.backbone_forward(x)
+        else:
+            coord_features = self.maps_transform(coord_features)
+            outputs = self.backbone_forward(image, coord_features)
+
+        outputs['instances'] = nn.functional.interpolate(outputs['instances'], size=image.size()[2:],
+                                                         mode='bilinear', align_corners=True)
+        if self.with_aux_output:
+            outputs['instances_aux'] = nn.functional.interpolate(outputs['instances_aux'], size=image.size()[2:],
+                                                             mode='bilinear', align_corners=True)
+        outputs['instances_cls_head'] = nn.functional.interpolate(outputs['instances_cls_head'], size=image.size()[2:],
+                                                             mode='bilinear', align_corners=True)
+        return outputs
