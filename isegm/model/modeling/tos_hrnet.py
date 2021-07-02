@@ -152,6 +152,26 @@ class EncoderBlock(nn.Module):
         xp = torch.cat((xp, x_side), dim=1)
         return xp, x
 
+class EncoderBlock_without_roi(EncoderBlock):
+    def __init__(self, n_inputs, n_channels, n_side_channels, n_layers=2,
+                 pool=True, scale=1.0):
+        super().__init__(n_inputs, n_channels, n_side_channels, n_layers,
+                 pool, scale)
+
+    def forward(self, x, x_side):
+        x = self.main(x)
+        xp = self.pool(x) if self.pool is not None else x
+
+        x_side = self.side(x_side)
+        
+        h, w = xp.size()[2:]
+        # x_side = ROIAlign((h, w), self.scale, -1)(x_side, roi)
+        x_side = F.interpolate(x_side, (h, w), mode='bilinear',
+                align_corners=True)
+        # print("WTF", xp.shape, x_side.shape)
+        xp = torch.cat((xp, x_side), dim=1)
+        return xp, x
+
 class DecoderBlock(nn.Module):
     def __init__(self, n_inputs, n_channels, n_layers=2):
         super(DecoderBlock, self).__init__()
@@ -277,16 +297,18 @@ class TOS_HRNet(nn.Module):
         self.context_branch = HighResolutionNet_with_hrnetoutput(width, num_classes, ocr_width, small, norm_layer_param, align_corners)
             
         # # Edge branch
-        # n_layers = 2
+        n_layers = 2
         # self.grad1 = EncoderBlock(4, 16, 18, n_layers, True, 1./4)
+        self.grad1 = EncoderBlock_without_roi(4, 16, 18, n_layers, True, 1./4)
+        self.grad2 = EncoderBlock_without_roi(32, 32, 36, n_layers, True, 1./8)
         # self.grad2 = EncoderBlock(32, 32, 18, n_layers, True, 1./8)
         # self.grad3 = EncoderBlock(64, 64, 36, n_layers, True, 1./16)
         # self.grad4 = EncoderBlock(128, 128, 72, n_layers, True, 1./16)
         # self.grad5 = EncoderBlock(256, 128, 144, n_layers, False, 1./16)
         # self.grad4_decoder = DecoderBlock(256, 128, n_layers)
         # self.grad3_decoder = DecoderBlock(128, 64, n_layers)
-        # self.grad2_decoder = DecoderBlock(64, 32, n_layers)
-        # self.grad1_decoder = DecoderBlock(32, 16, n_layers)
+        self.grad2_decoder = DecoderBlock(64, 32, n_layers)
+        self.grad1_decoder = DecoderBlock(32, 16, n_layers)
         # self.edge = nn.Conv2d(16, num_classes, kernel_size=1, bias=True)
 
         # # Fusion block
@@ -296,7 +318,7 @@ class TOS_HRNet(nn.Module):
         self.img_trans = nn.Sequential(conv1x1(3, 3),
                                        norm_layer(3),
                                        nn.ReLU(inplace=True))
-        self.fuse0 = nn.Sequential(conv1x1(48+3, 16),
+        self.fuse0 = nn.Sequential(conv1x1(48+16+3, 16),
                                    norm_layer(16),
                                    nn.ReLU(inplace=True))
         self.fuse1 = SimpleBottleneck(16)
@@ -322,7 +344,7 @@ class TOS_HRNet(nn.Module):
         # plt.imshow(s[1].detach().cpu().numpy())
         # plt.show()
         # exit()
-        # x_grad = torch.cat((x_lr, sobel(x_lr)[:, :1]), dim=1)
+        x_grad = torch.cat((x_lr, sobel(x_lr)[:, :1]), dim=1)
         # print("3", x_grad.shape)
         # Context stream
         # x_lr0 = self.conv1(x_lr)
@@ -340,10 +362,10 @@ class TOS_HRNet(nn.Module):
         # print("LOL", out.shape, cls_head_out.shape)
         # print("4", out[0].shape, out[1].shape, hrnetoutput[0].shape, hrnetoutput[1].shape, hrnetoutput[2].shape, hrnetoutput[3].shape)
         # out, out_aux = out
-        # # Edge stream
-        # x_gr1, x_enc1 = self.grad1(x_grad, hrnetoutput[0], roi)
+        # Edge stream
+        x_gr1, x_enc1 = self.grad1(x_grad, hrnetoutput[0])
         # # print("5", x_gr1.shape, x_enc1.shape)
-        # x_gr2, x_enc2 = self.grad2(x_gr1, hrnetoutput[0], roi)
+        x_gr2, x_enc2 = self.grad2(x_gr1, hrnetoutput[1])
         # # print("6", x_gr2.shape, x_enc2.shape)
         # x_gr3, x_enc3 = self.grad3(x_gr2, hrnetoutput[1], roi)
         # # print("7", x_gr3.shape, x_enc3.shape)
@@ -355,9 +377,10 @@ class TOS_HRNet(nn.Module):
         # # print("10", dec.shape)
         # dec = self.grad3_decoder(dec, x_enc3)
         # # print("11", dec.shape)
-        # dec = self.grad2_decoder(dec, x_enc2)
+        dec = x_gr2
+        dec = self.grad2_decoder(dec, x_enc2)
         # # print("12", dec.shape)
-        # dec = self.grad1_decoder(dec, x_enc1)
+        dec = self.grad1_decoder(dec, x_enc1)
         # # print("13", dec.shape)
         # edge = self.edge(dec)
 
@@ -374,8 +397,11 @@ class TOS_HRNet(nn.Module):
         # roipool = ROIAlign((h, w), 1./4, -1)
         # x_lr5 = roipool(x_lr5, roi)
         # x_img = roipool(x_img, roi)
-        # print("WTF", x_lr5.shape, x_img.shape)
-        fuse0 = torch.cat((x_lr5, F.interpolate(x_img, x_lr5.shape[2:])), dim=1)
+        # print("WTF", x_lr5.shape, dec.shape, x_img.shape)
+        # fuse0 = torch.cat((x_lr5, dec, F.interpolate(x_img, x_lr5.shape[2:], mode='bilinear',
+        #         align_corners=True)), dim=1)
+        fuse0 = torch.cat((F.interpolate(x_lr5, x_img.shape[2:], mode='bilinear',
+                align_corners=True), dec, x_img), dim=1)
         fuse0 = self.fuse0(fuse0)
         fuse1 = self.fuse1(fuse0)
         fuse2 = self.fuse2(fuse1)
