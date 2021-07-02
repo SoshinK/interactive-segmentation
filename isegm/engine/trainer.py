@@ -502,8 +502,8 @@ class TOS_HRNet_Trainer(ISTrainer):
                                  lambda: (output['instances_aux'], batch_data['instances']))
             loss = self.add_loss('instances_cls_head_loss', loss, losses_logging, validation,
                                  lambda: (output['instances_cls_head'], batch_data['instances']))
-            # loss = self.add_loss('instances_edges_loss', loss, losses_logging, validation,
-            #                      lambda: (output['instances_edges'], sobel(batch_data['instances'])))
+            loss = self.add_loss('instances_edges_loss', loss, losses_logging, validation,
+                                 lambda: (output['instances_edges'], sobel(batch_data['instances'])))
             if self.is_master:
                 with torch.no_grad():
                     for m in metrics:

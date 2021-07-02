@@ -309,7 +309,7 @@ class TOS_HRNet(nn.Module):
         # self.grad3_decoder = DecoderBlock(128, 64, n_layers)
         self.grad2_decoder = DecoderBlock(64, 32, n_layers)
         self.grad1_decoder = DecoderBlock(32, 16, n_layers)
-        # self.edge = nn.Conv2d(16, num_classes, kernel_size=1, bias=True)
+        self.edge = nn.Conv2d(16, num_classes, kernel_size=1, bias=True)
 
         # # Fusion block
         self.mask_trans = nn.Sequential(conv1x1(128, 48),
@@ -382,7 +382,7 @@ class TOS_HRNet(nn.Module):
         # # print("12", dec.shape)
         dec = self.grad1_decoder(dec, x_enc1)
         # # print("13", dec.shape)
-        # edge = self.edge(dec)
+        edge = self.edge(dec)
 
         # # Fusion stream
         # print("14", out.shape)
@@ -408,7 +408,7 @@ class TOS_HRNet(nn.Module):
         fuse3 = self.fuse3(fuse2)
         mask = self.mask(fuse3)
         # print("LOL2", mask.shape)
-        edge = None
+
         return mask, out_aux, cls_head_out, edge
 
     # def load_pretrained_weights(self, pretrained_path=''):
