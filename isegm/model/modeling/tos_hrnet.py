@@ -48,9 +48,14 @@ class L_Conv2d(nn.Conv2d):
         weight_mean = weight.mean(dim=1, keepdim=True).mean(dim=2,
                                                             keepdim=True).mean(dim=3, keepdim=True)
         weight = weight - weight_mean
-        # std = (weight).view(weight.size(0), -1).std(dim=1).view(-1, 1, 1, 1) + 1e-5
+        #std = (weight).view(weight.size(0), -1).std(dim=1).view(-1, 1, 1, 1) + 1e-5
         std = torch.sqrt(torch.var(weight.view(weight.size(0), -1), dim=1) + 1e-12).view(-1, 1, 1, 1) + 1e-5
         weight = weight / std.expand_as(weight)
+        #if self.bias is None:
+        #    print("WTF", x.shape, weight.shape, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        #else:
+        #    print("WTF not NONE", x.shape, weight.shape, self.bias.shape, self.stride, self.padding, self.dilation, self.groups)
+ 
         return F.conv2d(x, weight, self.bias, self.stride,
                         self.padding, self.dilation, self.groups)
 
@@ -301,8 +306,8 @@ class TOS_HRNet(nn.Module):
         # self.grad1 = EncoderBlock(4, 16, 18, n_layers, True, 1./4)
         self.grad1 = EncoderBlock_without_roi(4, 16, 18, n_layers, True, 1./4)
         self.grad2 = EncoderBlock_without_roi(32, 32, 36, n_layers, True, 1./8)
-        self.grad2 = EncoderBlock_without_roi(64, 64, 18, n_layers, True, 1./8)
-        self.grad3 = EncoderBlock_without_roi(128, 128, 36, n_layers, True, 1./16)
+        self.grad3 = EncoderBlock_without_roi(64, 64, 72, n_layers, True, 1./8)
+        self.grad4 = EncoderBlock_without_roi(128, 128, 144, n_layers, True, 1./16)
         # self.grad4 = EncoderBlock(128, 128, 72, n_layers, True, 1./16)
         # self.grad5 = EncoderBlock(256, 128, 144, n_layers, False, 1./16)
         self.grad4_decoder = DecoderBlock(256, 128, n_layers)
