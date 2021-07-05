@@ -511,3 +511,46 @@ class TOS_HRNet_Trainer(ISTrainer):
                                  *(batch_data[x] for x in m.gt_outputs))
         return loss, losses_logging, batch_data, output
 
+    def save_visualization(self, splitted_batch_data, outputs, global_step, prefix):
+        output_images_path = self.cfg.VIS_PATH / prefix
+        if self.task_prefix:
+            output_images_path /= self.task_prefix
+
+        if not output_images_path.exists():
+            output_images_path.mkdir(parents=True)
+        image_name_prefix = f'{global_step:06d}'
+
+        def _save_image(suffix, image):
+            cv2.imwrite(str(output_images_path / f'{image_name_prefix}_{suffix}.jpg'),
+                        image, [cv2.IMWRITE_JPEG_QUALITY, 85])
+
+        images = splitted_batch_data['images']
+        points = splitted_batch_data['points']
+        instance_masks = splitted_batch_data['instances']
+
+        gt_instance_masks = instance_masks.cpu().numpy()
+        predicted_instance_masks = torch.sigmoid(outputs['instances']).detach().cpu().numpy()
+        predicted_grad = torch.sigmoid(outputs['instances_edges']).detach().cpu().numpy()
+        predicted_lr = torch.sigmoid(outputs['instances_cls_head']).detach().cpu().numpy()
+        points = points.detach().cpu().numpy()
+
+        image_blob, points = images[0], points[0]
+        gt_mask = np.squeeze(gt_instance_masks[0], axis=0)
+        predicted_mask = np.squeeze(predicted_instance_masks[0], axis=0)
+        predicted_grad = np.squeeze(predicted_grad[0], axis=0)
+        predicted_lr = np.squeeze(predicted_lr[0], axis=0)
+
+        image = image_blob.cpu().numpy() * 255
+        image = image.transpose((1, 2, 0))
+
+        image_with_points = draw_points(image, points[:self.max_interactive_points], (0, 255, 0))
+        image_with_points = draw_points(image_with_points, points[self.max_interactive_points:], (0, 0, 255))
+
+        gt_mask[gt_mask < 0] = 0.25
+        gt_mask = draw_probmap(gt_mask)
+        predicted_mask = draw_probmap(predicted_mask)
+        predicted_grad = draw_probmap(predicted_grad)
+        predicted_lr = draw_probmap(predicted_lr)
+        viz_image = np.hstack((image_with_points, gt_mask, predicted_mask, predicted_grad, predicted_lr)).astype(np.uint8)
+
+        _save_image('instance_segmentation', viz_image[:, :, ::-1])
