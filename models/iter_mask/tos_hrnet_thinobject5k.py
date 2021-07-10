@@ -1,6 +1,6 @@
 from isegm.utils.exp_imports.default import *
-MODEL_NAME = 'thinobject_finetune_tos_hrnet18'
-
+MODEL_NAME = 'thinobject_tos_hrnet18'
+from isegm.model.modifiers import LRMult
 
 def main(cfg):
     model, model_cfg = init_model(cfg)
@@ -9,16 +9,20 @@ def main(cfg):
 
 def init_model(cfg):
     model_cfg = edict()
-    model_cfg.crop_size = (320, 480)
+    # model_cfg.crop_size = (320, 480)
+    model_cfg.crop_size = (512, 512)
     model_cfg.num_max_points = 24
     # checkpoint_path = '/home/konstantin_soshin/Work/interactive-segmentation/weights/last_checkpoint_tos_hrnet_short_with_edge_loss_bs17.pth' #
-    checkpoint_path = '/home/konstantin_soshin/Work/interactive-segmentation/weights/last_checkpoint_tos_hrnet_long.pth'
+    checkpoint_path = 'weights/coco_lvis_h18_itermask.pth'
     state_dict = torch.load(checkpoint_path, map_location='cpu')
 
     model = TOSHRNetModel(width=18, ocr_width=64, with_aux_output=True, use_leaky_relu=True,
                        use_rgb_conv=False, use_disks=True, norm_radius=5,
-                       with_prev_mask=True)
-    model.load_state_dict(state_dict['state_dict'], strict=False)
+                       with_prev_mask=True, hrnet_lr_mult=0.01)
+    model.feature_extractor.context_branch.ocr_distri_head.apply(LRMult(0.1))
+    model.feature_extractor.context_branch.ocr_gather_head.apply(LRMult(0.1))
+    model.feature_extractor.context_branch.conv3x3_ocr.apply(LRMult(0.1))
+    model.feature_extractor.context_branch.load_state_dict(state_dict['state_dict'], strict=False)
     model.to(cfg.device)
     # model.to(cfg.device)
     # model.apply(initializer.XavierGluon(rnd_type='gaussian', magnitude=2.0))
@@ -28,7 +32,7 @@ def init_model(cfg):
 
 
 def train(model, cfg, model_cfg):
-    cfg.batch_size = 28 if cfg.batch_size < 1 else cfg.batch_size
+    cfg.batch_size = 16 if cfg.batch_size < 1 else cfg.batch_size
     cfg.val_batch_size = cfg.batch_size
     crop_size = model_cfg.crop_size
 
@@ -60,18 +64,31 @@ def train(model, cfg, model_cfg):
                                        merge_objects_prob=0.15,
                                        max_num_merged_objects=2)
 
-    trainset = CocoLvisThinObject5kDataset(
-        cfg.LVIS_v1_PATH,
+    # trainset = CocoLvisThinObject5kDataset(
+    #     cfg.LVIS_v1_PATH,
+    #     cfg.THINOBJ5K_PATH,
+    #     augmentator=train_augmentator,
+    #     min_object_area=1000,
+    #     keep_background_prob=0.05,
+    #     points_sampler=points_sampler,
+    #     epoch_len=9000,
+    #     # epoch_len=5000,
+    #     stuff_prob=0.30,
+    #     cocolvis_size=0.5
+    # )
+    trainset = ThinObject5k(
         cfg.THINOBJ5K_PATH,
+        split='train',
         augmentator=train_augmentator,
         min_object_area=1000,
         keep_background_prob=0.05,
         points_sampler=points_sampler,
-        # epoch_len=9000,
-        epoch_len=5000,
+        epoch_len=9000,
+        # epoch_len=5000,
         stuff_prob=0.30,
         cocolvis_size=0.5
     )
+
 
     valset = CocoLvisThinObject5kDataset(
         cfg.LVIS_v1_PATH,
@@ -86,7 +103,7 @@ def train(model, cfg, model_cfg):
     )
 
     optimizer_params = {
-        'lr': 5e-5, 'betas': (0.9, 0.999), 'eps': 1e-8
+        'lr': 5e-4, 'betas': (0.9, 0.999), 'eps': 1e-8
     }
 
     lr_scheduler = partial(torch.optim.lr_scheduler.MultiStepLR,
@@ -101,4 +118,4 @@ def train(model, cfg, model_cfg):
                         metrics=[AdaptiveIoU()],
                         max_interactive_points=model_cfg.num_max_points,
                         max_num_next_clicks=3)
-    trainer.run(num_epochs=10)
+    trainer.run(num_epochs=100)
