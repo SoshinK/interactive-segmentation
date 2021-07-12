@@ -1,4 +1,5 @@
 from datetime import timedelta
+from isegm.data.datasets.refined_io import RefinedIO
 from pathlib import Path
 
 import torch
@@ -62,7 +63,8 @@ def get_dataset(dataset_name, cfg):
         dataset = DavisDataset(cfg.COCO_MVAL_PATH)
     elif dataset_name == 'ThinObject5k':
         dataset = ThinObject5k(cfg.THINOBJ5K_PATH)
-
+    elif dataset_name == 'RefinedIO':
+        dataset = RefinedIO(cfg.REFINEDIO_PATH)
     else:
         dataset = None
 
