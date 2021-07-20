@@ -37,14 +37,24 @@ def train(model, cfg, model_cfg):
     crop_size = model_cfg.crop_size
 
     loss_cfg = edict()
-    loss_cfg.instance_loss = NormalizedFocalLossSigmoid(alpha=0.5, gamma=2)
+    loss_cfg.instance_loss = CompositionLosses([
+        BootstrappedCrossEntropyLoss(), 
+        DiceLoss()
+        ]) # final mask loss
     loss_cfg.instance_loss_weight = 1.0
+    
     loss_cfg.instance_aux_loss = SigmoidBinaryCrossEntropyLoss()
-    loss_cfg.instance_aux_loss_weight = 0.4
-    loss_cfg.instances_cls_head_loss = SigmoidBinaryCrossEntropyLoss()
-    loss_cfg.instances_cls_head_loss_weight = 0.4
-    loss_cfg.instances_edges_loss = SigmoidBinaryCrossEntropyLoss()
-    loss_cfg.instances_edges_loss_weight = 0.4
+    loss_cfg.instance_aux_loss_weight = 0.2
+
+    loss_cfg.instances_cls_head_loss = BinaryCrossEntropyLoss(class_balance=True, average='size') # loss_lr
+    loss_cfg.instances_cls_head_loss_weight = 1.0
+    
+    loss_cfg.instances_edges_loss = CompositionLosses([
+        BinaryCrossEntropyLoss(class_balance=True, average='size'),
+        DiceLoss()
+        ]) # loss_edge
+    loss_cfg.instances_edges_loss_weight = 1.0
+
 
     train_augmentator = Compose([
         UniformRandomResize(scale_range=(0.75, 1.40)),
@@ -64,18 +74,7 @@ def train(model, cfg, model_cfg):
                                        merge_objects_prob=0.15,
                                        max_num_merged_objects=2)
 
-    # trainset = CocoLvisThinObject5kDataset(
-    #     cfg.LVIS_v1_PATH,
-    #     cfg.THINOBJ5K_PATH,
-    #     augmentator=train_augmentator,
-    #     min_object_area=1000,
-    #     keep_background_prob=0.05,
-    #     points_sampler=points_sampler,
-    #     epoch_len=9000,
-    #     # epoch_len=5000,
-    #     stuff_prob=0.30,
-    #     cocolvis_size=0.5
-    # )
+
     trainset = ThinObject5k(
         cfg.THINOBJ5K_PATH,
         split='train',
@@ -83,20 +82,16 @@ def train(model, cfg, model_cfg):
         min_object_area=1000,
         keep_background_prob=0.05,
         points_sampler=points_sampler,
-        epoch_len=9000,
+        epoch_len=5000,
         # epoch_len=5000,
-        stuff_prob=0.30,
-        cocolvis_size=0.5
+        stuff_prob=0.30
     )
 
 
-    valset = CocoLvisThinObject5kDataset(
-        cfg.LVIS_v1_PATH,
+    valset = ThinObject5k(
         cfg.THINOBJ5K_PATH,
         split='val',
-        thinobject5k_anno_file='val_instances.pkl',
         augmentator=val_augmentator,
-        min_object_area=1000,
         points_sampler=points_sampler,
         epoch_len=2000
 
@@ -107,13 +102,13 @@ def train(model, cfg, model_cfg):
     }
 
     lr_scheduler = partial(torch.optim.lr_scheduler.MultiStepLR,
-                           milestones=[200, 220], gamma=0.1)
+                           milestones=[85, 100], gamma=0.1)
     trainer = TOS_HRNet_Trainer(model, cfg, model_cfg, loss_cfg,
                         trainset, valset,
                         optimizer='adam',
                         optimizer_params=optimizer_params,
                         lr_scheduler=lr_scheduler,
-                        checkpoint_interval=[(0, 5), (18, 1)],
+                        checkpoint_interval=[(0, 5), (90, 1)],
                         image_dump_interval=1,
                         metrics=[AdaptiveIoU()],
                         max_interactive_points=model_cfg.num_max_points,

@@ -159,3 +159,215 @@ class SigmoidBinaryCrossEntropyLoss(nn.Module):
 
         loss = self._weight * (loss * sample_weight)
         return torch.mean(loss, dim=misc.get_dims_with_exclusion(loss.dim(), self._batch_axis))
+
+
+'''
+https://github.com/liewjunhao/thin-object-selection
+'''
+
+
+def binary_cross_entropy_loss(output, label, void_pixels=None,
+        class_balance=False, reduction='mean', average='batch'):
+    """Binary cross entropy loss for training
+    # arguments:
+        output: output from the network
+        label: ground truth label
+        void_pixels: pixels to ignore when computing the loss
+        class_balance: to use class-balancing weights
+        reduction (str): either 'none'|'sum'|'mean'
+            'none': the loss remains the same size as output
+            'sum': the loss is summed
+            'mean': the loss is average based on the 'average' flag
+        average (str): either 'size'|'batch'
+            'size': loss divide by #pixels
+            'batch': loss divide by batch size
+    Remarks: Currently, class_balance=True does not support
+    reduction='none'
+    """
+    assert output.size() == label.size()
+    assert not (class_balance and reduction == 'none')
+
+    labels = torch.ge(label, 0.5).float()
+    num_labels_pos = torch.sum(labels)
+    num_labels_neg = torch.sum(1.0 - labels)
+    num_total = num_labels_pos + num_labels_neg
+
+    output_gt_zero = torch.ge(output, 0).float()
+    loss_val = torch.mul(output, (labels - output_gt_zero)) - torch.log(
+        1 + torch.exp(output - 2 * torch.mul(output, output_gt_zero)))
+    
+    if class_balance:
+        loss_pos_pix = -torch.mul(labels, loss_val)
+        loss_neg_pix = -torch.mul(1.0 - labels, loss_val)
+
+        if void_pixels is not None:
+            w_void = torch.le(void_pixels, 0.5).float()
+            loss_pos_pix = torch.mul(w_void, loss_pos_pix)
+            loss_neg_pix = torch.mul(w_void, loss_neg_pix)
+            num_total = num_total - torch.ge(void_pixels, 0.5).float().sum()
+
+        loss_pos = torch.sum(loss_pos_pix)
+        loss_neg = torch.sum(loss_neg_pix)
+        final_loss = num_labels_neg / num_total * loss_pos + num_labels_pos / num_total * loss_neg
+
+        if reduction == 'sum':
+            # sum the loss across all elements
+            return final_loss
+        elif reduction == 'mean':
+            # average the loss
+            if average == 'size':
+                final_loss /= num_total
+            elif average == 'batch':
+                final_loss /= label.size()[0]
+            return final_loss
+        else:
+            raise ValueError('Unsupported reduction mode: {}'.format(reduction))
+    
+    else:
+        loss_val = -loss_val
+        if void_pixels is not None:
+            w_void = torch.le(void_pixels, 0.5).float()
+            loss_val = torch.mul(w_void, loss_val)
+            num_total = num_total - torch.ge(void_pixels, 0.5).float().sum()
+        # final_loss = torch.sum(loss_val)
+
+        if reduction == 'none':
+            # return the loss directly
+            return loss_val
+        elif reduction == 'sum':
+            # sum the loss across all elements
+            return torch.sum(loss_val)
+        elif reduction == 'mean':
+            # average the loss
+            final_loss = torch.sum(loss_val)
+            if average == 'size':
+                final_loss /= num_total
+            elif average == 'batch':
+                final_loss /= label.size()[0]
+            return final_loss
+        else:
+            raise ValueError('Unsupported reduction mode: {}'.format(reduction))
+
+
+def dice_loss(output, label, void_pixels=None, smooth=1e-8):
+    """Dice loss for training.
+    Remarks:
+    + Sigmoid should be applied before applying this loss.
+    + This loss currently only supports average='size'.
+    """
+    assert output.size() == label.size()
+    p2 = (output * output)
+    g2 = (label * label)
+    pg = (output * label)
+    batch_size = output.size(0)
+
+    if void_pixels is not None:
+        w_void = torch.le(void_pixels, 0.5).float()
+        p2 = torch.mul(p2, w_void)
+        g2 = torch.mul(g2, w_void)
+        pg = torch.mul(pg, w_void)
+
+    p2 = p2.sum(3).sum(2).sum(1) # (N, )
+    g2 = g2.sum(3).sum(2).sum(1) # (N, )
+    pg = pg.sum(3).sum(2).sum(1) # (N, )
+    final_loss = 1.0 - torch.div((2 * pg), (p2 + g2 + smooth))
+    final_loss = torch.sum(final_loss)
+    final_loss /= batch_size
+    return final_loss
+
+def bootstrapped_cross_entopy_loss(output, label, ratio=1./16, void_pixels=None):
+    """Bootstrapped cross-entropy loss used in FRRN 
+    <https://arxiv.org/abs/1611.08323>
+    Reference:
+        [1] Tobias et al. "Full-Resolution Residual Networks for Semantic 
+        Segmentation in Street Scenes", CVPR 2017.
+        [2] https://github.com/TobyPDE/FRRN/blob/master/dltools/losses.py
+    Args:
+        output: The output of the network
+        label: The ground truth label
+        batch_size: The batch size
+        ratio: A variable that determines the number of pixels
+               selected in the bootstrapping process. The number of pixels
+               is determined by size**2 * ratio, where we assume the 
+               height and width are the same (size).
+    """
+    # compute cross entropy
+    assert output.size() == label.size()
+
+    labels = torch.ge(label, 0.5).float()
+    num_labels_pos = torch.sum(labels)
+    num_labels_neg = torch.sum(1.0 - labels)
+    num_total = num_labels_pos + num_labels_neg
+
+    # compute the pixel-wise cross entropy.
+    output_gt_zero = torch.ge(output, 0).float()
+    loss_val = torch.mul(output, (labels - output_gt_zero)) - torch.log(
+        1 + torch.exp(output - 2 * torch.mul(output, output_gt_zero)))
+    
+    # ignore the void pixels
+    if void_pixels is not None:
+        w_void = torch.le(void_pixels, 0.5).float()
+        loss_val = torch.mul(w_void, loss_val)
+    
+    xentropy = -loss_val
+
+    # for each element in the batch, collect the top K worst predictions
+    K = int(label.size(2) * label.size(3) * ratio)
+    batch_size = label.size(0)
+    
+    result = 0.0
+    for i in range(batch_size):
+        batch_errors = xentropy[i, :]
+        flat_errors = torch.flatten(batch_errors)
+
+        # get the worst predictions.
+        worst_errors, _ = torch.sort(flat_errors)[-K:]
+
+        result += torch.mean(worst_errors)
+
+    result /= batch_size
+
+    return result
+
+class BinaryCrossEntropyLoss(nn.Module):
+    def __init__(self, void_pixels=None,
+        class_balance=False, reduction='mean', average='batch'):
+        super().__init__()
+        self.void_pixels = void_pixels
+        self.class_balance = class_balance
+        self.reduction = reduction
+        self.average = average
+
+    def forward(self, output, label):
+        return binary_cross_entropy_loss(output, label, self.void_pixels, self.class_balance, self.reduction, self.average)
+
+class DiceLoss(nn.Module):
+    def __init__(self, void_pixels=None, smooth=1e-8):
+        super().__init__()
+        self.void_pixels = void_pixels
+        self.smooth = smooth
+    def forward(self, output, label):
+        return dice_loss(output, label, self.void_pixels, self.smooth)
+
+class BootstrappedCrossEntropyLoss(nn.Module):
+    def __init__(self, ratio=1./16, void_pixels=None):
+        super().__init__()
+        self.ratio = ratio
+        self.void_pixels = void_pixels
+    def forward(self, output, label):
+        return bootstrapped_cross_entopy_loss(output, label, self.ratio, self.void_pixels)
+
+class CompositionLosses(nn.Module):
+    def __init__(self, criterion_list, weights=None):
+        super().__init__()
+        self.criterion_list = criterion_list
+        self.weights = weights
+        if not self.weights is None:
+            assert len(self.criterion_list) == len(self.weights) 
+        else:
+            self.weights = np.ones(len(criterion_list))
+    def forward(self, output, label):
+        result_loss = 0
+        for loss, weight in zip(self.criterion_list, self.weights):
+            result_loss += weight * loss(output, label)
+        return result_loss
