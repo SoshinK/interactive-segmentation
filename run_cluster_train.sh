@@ -3,6 +3,7 @@ ln -s /group-volume/orc_srr/k.soshin/data/datasets/COCO+LVIS datasets/COCO+LVIS
 ln -s /group-volume/orc_srr/k.soshin/data/datasets/ThinObject5K datasets/ThinObject5K
 ln -s /group-volume/orc_srr/k.soshin/pretrained_models/  pretrained_models
 ln -s /group-volume/orc_srr/k.soshin/experiments/ experiments
+ln -s /group-volume/orc_srr/k.soshin/weights/ weights
 # python3 train.py models/iter_mask/hrnet18_cocolvis_itermask_3p.py --gpus=0,1,2,3 --workers=12 --exp-name=first-try
 #python3 train.py models/iter_mask/tos_hrnet18_cocolvis_itermask_3p.py --gpus=0,1,2,3 --workers=12 --exp-name=tos_hrnet_cls_aux_fusestream
 # python3 train.py models/iter_mask/tos_hrnet18_cocolvis_itermask_3p.py --gpus=0,1,2 --workers=12 --batch-size=33 --exp-name=tos_hrnet_cls_edge_longer_with_edge_loss_bs25
