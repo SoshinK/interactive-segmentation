@@ -109,7 +109,7 @@ def train(model, cfg, model_cfg):
                         optimizer_params=optimizer_params,
                         lr_scheduler=lr_scheduler,
                         checkpoint_interval=[(0, 5), (90, 1)],
-                        image_dump_interval=1,
+                        image_dump_interval=3000,
                         metrics=[AdaptiveIoU()],
                         max_interactive_points=model_cfg.num_max_points,
                         max_num_next_clicks=3)
